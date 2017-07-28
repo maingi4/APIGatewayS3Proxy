@@ -1,0 +1,22 @@
+version: 0.1
+
+phases:
+    install:
+         commands:
+            - apt-get -y update
+            - apt-get install sed
+            - npm install -g serverless
+    build:
+        commands:
+           - epochTime=$(date +%s) && sed -i -e "s/thisiswhatiwillreplace/$epochTime/g" serverless.yml
+           - tail serverless.yml
+    post_build:
+         commands:
+            - serverless deploy --stage $env --region us-east-1 --verbose
+
+artifacts:
+    files:
+         - serverless.yml
+         - vars.js
+         - promotion.sh
+    discard-paths: yes

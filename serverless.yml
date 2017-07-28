@@ -1,0 +1,115 @@
+service: fileStorageServices
+provider:
+  name: aws
+  runtime: dotnetcore1.0
+  stage: ${opt:stage} #read from console input
+  region: us-east-1
+  role: arn:aws:iam::<your acc id>:role/s3ProxyRole
+  versionFunctions: false
+  custom:
+    setup: ${file(vars.js):setup} #initializes the variables which adds to environment variables
+  stackTags:
+   Environment: ${opt:stage}
+  stackPolicy: # Optional CF stack policy. The example below allows updates to all resources except deleting/replacing EC2 instances (use with caution!)
+    - Effect: Allow
+      Principal: "*"
+      Action: "Update:*"
+      Resource: "*"
+    - Effect: Deny
+      Principal: "*"
+      Action:
+        - Update:Replace
+        - Update:Delete
+      Condition:
+        StringEquals:
+          ResourceType:
+            - AWS::EC2::Instance
+
+resources:
+  Resources:
+    s3filesbucket:
+      Type: 'AWS::S3::Bucket'
+      Properties:
+        AccessControl: PublicReadWrite
+        BucketName: ${env:bucketNamePrefix}<your bucket name>
+        VersioningConfiguration:
+          Status: Suspended
+        Tags:
+          - Key: Environment
+            Value: ${opt:stage}
+        WebsiteConfiguration:
+          IndexDocument: index.html
+    route53BucketDNS: #this adds a DNS recordset which can be used for public viewing of objects
+      Type: "AWS::Route53::RecordSet"
+      Properties: 
+        HostedZoneId: <hosted zone id>
+        Name: ${env:bucketNamePrefix}<your bucket name>
+        ResourceRecords:
+          - ${env:bucketNamePrefix}<your bucket name>.s3-website-us-east-1.amazonaws.com
+        TTL: 300
+        Type: CNAME
+    s3Proxy:
+      Type: "AWS::ApiGateway::RestApi"
+      Properties:
+        BinaryMediaTypes: #add or substract MIME types here
+          - image/png
+          - image/jpg
+          - image/gif
+          - image/x-icon
+          - application/octet-stream
+        Description: Storage service for ${opt:stage} environment
+        FailOnWarnings: false
+        Name: ${env:apiGatewayPrefix}fileStorage #api gateway name
+    s3ProxyAuthorizer: #custom authorizer for the API gateway which adds stuff to the bucket
+      Type: "AWS::ApiGateway::Authorizer"
+      Properties:
+        AuthorizerResultTtlInSeconds: 300
+        AuthorizerUri: arn:aws:apigateway:us-east-1:lambda:path//2015-03-31/functions/arn:aws:lambda:us-east-1:<your acc id>:function:${opt:stage}<auth fn name>/invocations
+        IdentitySource: method.request.header.Authorization
+        IdentityValidationExpression: ^Bearer.+
+        Name: CommonAuthorizer
+        RestApiId:
+          Ref: "s3Proxy"
+        Type: TOKEN
+    s3ProxyAnyMethod:
+      Type: "AWS::ApiGateway::Method"
+      Properties:
+        ApiKeyRequired: false
+        AuthorizationType: CUSTOM
+        AuthorizerId:
+          Ref: "s3ProxyAuthorizer"
+        HttpMethod: ANY
+        Integration:
+          Credentials: arn:aws:iam::<your acc id>:role/s3ProxyRole
+          IntegrationHttpMethod: ANY
+          IntegrationResponses:
+            - StatusCode: 200
+          PassthroughBehavior: WHEN_NO_MATCH
+          RequestParameters:
+            integration.request.header.Content-Disposition: method.request.header.Content-Disposition
+            integration.request.header.Content-Type: method.request.header.Content-Type
+            integration.request.header.x-amz-acl: method.request.header.x-amz-acl
+            integration.request.path.key: method.request.querystring.key
+          Type: AWS
+          Uri: arn:aws:apigateway:us-east-1:s3:path/${env:bucketNamePrefix}<your bucket name>/{key}
+        MethodResponses:
+          - StatusCode: 200
+        RequestParameters:
+          method.request.header.Content-Disposition: false
+          method.request.header.Content-Type: false
+          method.request.header.x-amz-acl: false
+          method.request.querystring.key: false
+        ResourceId:
+          Fn::GetAtt: 
+            - "s3Proxy"
+            - "RootResourceId"
+        RestApiId:
+          Ref: "s3Proxy"
+    ApiGatewayDeploymentthisiswhatiwillreplace:
+      Type: 'AWS::ApiGateway::Deployment'
+      Properties:
+        RestApiId:
+          Ref: "s3Proxy"
+        StageName: ${opt:stage}
+      DependsOn:
+        - s3ProxyAnyMethod
