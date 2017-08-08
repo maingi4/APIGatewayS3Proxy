@@ -83,7 +83,25 @@ resources:
           Credentials: arn:aws:iam::<your acc id>:role/s3ProxyRole
           IntegrationHttpMethod: ANY
           IntegrationResponses:
-            - StatusCode: 200
+              - StatusCode: 200
+                ResponseParameters:
+                  method.response.header.Content-Type: integration.response.header.Content-Type
+                  method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+              - StatusCode: 400
+                SelectionPattern: "400"
+                ResponseParameters:
+                  method.response.header.Content-Type: integration.response.header.Content-Type
+                  method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+              - StatusCode: 404
+                SelectionPattern: "404"
+                ResponseParameters:
+                  method.response.header.Content-Type: integration.response.header.Content-Type
+                  method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+              - StatusCode: 500
+                SelectionPattern: '5\d{2}'
+                ResponseParameters:
+                  method.response.header.Content-Type: integration.response.header.Content-Type
+                  method.response.header.Content-Disposition: integration.response.header.Content-Disposition
           PassthroughBehavior: WHEN_NO_MATCH
           RequestParameters:
             integration.request.header.Content-Disposition: method.request.header.Content-Disposition
@@ -94,6 +112,21 @@ resources:
           Uri: arn:aws:apigateway:us-east-1:s3:path/${env:bucketNamePrefix}<your bucket name>/{key}
         MethodResponses:
           - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+          - StatusCode: 400
+            ResponseParameters:
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+          - StatusCode: 404
+            ResponseParameters:
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
+          - StatusCode: 500
+            ResponseParameters:
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Disposition: integration.response.header.Content-Disposition
         RequestParameters:
           method.request.header.Content-Disposition: false
           method.request.header.Content-Type: false
