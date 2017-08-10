@@ -1,10 +1,15 @@
 service: fileStorageServices
+custom:
+  accountId: <your acc id>
+  bucketName: <your bucket name>
+  HostedZoneId: <hosted zone id>
+  authFunctionName: <auth fn name>
 provider:
   name: aws
   runtime: dotnetcore1.0
   stage: ${opt:stage} #read from console input
   region: us-east-1
-  role: arn:aws:iam::<your acc id>:role/s3ProxyRole
+  role: arn:aws:iam::${self:custom.accountId}:role/s3ProxyRole
   versionFunctions: false
   custom:
     setup: ${file(vars.js):setup} #initializes the variables which adds to environment variables
@@ -24,14 +29,13 @@ provider:
         StringEquals:
           ResourceType:
             - AWS::EC2::Instance
-
 resources:
   Resources:
     s3filesbucket:
       Type: 'AWS::S3::Bucket'
       Properties:
         AccessControl: PublicReadWrite
-        BucketName: ${env:bucketNamePrefix}<your bucket name>
+        BucketName: ${env:bucketNamePrefix}${self:custom.bucketName}
         VersioningConfiguration:
           Status: Suspended
         Tags:
@@ -42,10 +46,10 @@ resources:
     route53BucketDNS: #this adds a DNS recordset which can be used for public viewing of objects
       Type: "AWS::Route53::RecordSet"
       Properties: 
-        HostedZoneId: <hosted zone id>
-        Name: ${env:bucketNamePrefix}<your bucket name>
+        HostedZoneId: ${self:custom.HostedZoneId}
+        Name: ${env:bucketNamePrefix}${self:custom.bucketName}
         ResourceRecords:
-          - ${env:bucketNamePrefix}<your bucket name>.s3-website-us-east-1.amazonaws.com
+          - ${env:bucketNamePrefix}${self:custom.bucketName}.s3-website-us-east-1.amazonaws.com
         TTL: 300
         Type: CNAME
     s3Proxy:
@@ -64,7 +68,7 @@ resources:
       Type: "AWS::ApiGateway::Authorizer"
       Properties:
         AuthorizerResultTtlInSeconds: 300
-        AuthorizerUri: arn:aws:apigateway:us-east-1:lambda:path//2015-03-31/functions/arn:aws:lambda:us-east-1:<your acc id>:function:${opt:stage}<auth fn name>/invocations
+        AuthorizerUri: arn:aws:apigateway:us-east-1:lambda:path//2015-03-31/functions/arn:aws:lambda:us-east-1:${self:custom.accountId}:function:${opt:stage}${self:custom.authFunctionName}/invocations
         IdentitySource: method.request.header.Authorization
         IdentityValidationExpression: ^Bearer.+
         Name: CommonAuthorizer
@@ -80,7 +84,7 @@ resources:
           Ref: "s3ProxyAuthorizer"
         HttpMethod: ANY
         Integration:
-          Credentials: arn:aws:iam::<your acc id>:role/s3ProxyRole
+          Credentials: arn:aws:iam::${self:custom.accountId}:role/s3ProxyRole
           IntegrationHttpMethod: ANY
           IntegrationResponses:
               - StatusCode: 200
@@ -109,7 +113,7 @@ resources:
             integration.request.header.x-amz-acl: method.request.header.x-amz-acl
             integration.request.path.key: method.request.querystring.key
           Type: AWS
-          Uri: arn:aws:apigateway:us-east-1:s3:path/${env:bucketNamePrefix}<your bucket name>/{key}
+          Uri: arn:aws:apigateway:us-east-1:s3:path/${env:bucketNamePrefix}${self:custom.bucketName}/{key}
         MethodResponses:
           - StatusCode: 200
             ResponseParameters:
